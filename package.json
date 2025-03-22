@@ -2,7 +2,7 @@
   "name": "expressjs-app",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
+  "main": "index.mjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start:dev": "nodemon ./src/index.mjs",
