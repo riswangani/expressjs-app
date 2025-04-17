@@ -1,119 +1,100 @@
 import express from 'express';
-import {
-  query,
-  validationResult,
-  body,
-  matchedData,
-  checkSchema,
-} from 'express-validator';
+import routes from './routes/index.mjs';
+import cookieParser from 'cookie-parser';
+import session from 'express-session';
+import passport from 'passport';
+import './strategies/local-strategy.mjs';
 
-import { createUserValidationSchema } from './utils/validationSchemas.mjs';
+import { mockUsers } from './utils/constans.mjs';
 
 const app = express();
 
 app.use(express.json());
-
-const resolveIndexByUserId = (req, res, next) => {
-  const {
-    params: { id },
-  } = req;
-
-  const parsedId = parseInt(id);
-  if (isNaN(parsedId)) return res.sendStatus(400);
-  const findUserIndex = mockUsers.findIndex((user) => user.id === parsedId);
-  if (findUserIndex === -1) return res.sendStatus(404);
-  req.findUserIndex = findUserIndex;
-  next();
-};
-const PORT = process.env.PORT || 3000;
-
-const mockUsers = [
-  { id: 1, username: 'johndoe', FullName: 'John Doe' },
-  { id: 2, username: 'janedoe', FullName: 'Jane Doe' },
-  { id: 3, username: 'aisha', FullName: 'Aisha Jackson' },
-  { id: 4, username: 'tina', FullName: 'Tina Turner' },
-  { id: 5, username: 'michael', FullName: 'Michael Jackson' },
-  { id: 6, username: 'prince', FullName: 'Prince Rogers Nelson' },
-  { id: 7, username: 'whitney', FullName: 'Whitney Houston' },
-];
-
-app.get('/', (req, res) => {
-  res.status(201).send({ msg: 'Hello World!' });
-});
-
-app.get(
-  '/api/users',
-  query('filter')
-    .isString()
-    .notEmpty()
-    .withMessage('Must not be empty')
-    .isLength({ min: 3, max: 10 })
-    .withMessage('Must be at least 3-10 characters'),
-  (req, res) => {
-    const result = validationResult(req);
-    console.log(result);
-    const {
-      query: { filter, value },
-    } = req;
-
-    if (filter && value)
-      return res.send(mockUsers.filter((user) => user[filter].includes(value)));
-    return res.send(mockUsers);
-  }
+app.use(cookieParser('helloworld'));
+app.use(
+  session({
+    secret: 'gani fulstack developer',
+    saveUninitialized: false,
+    resave: false,
+    cookie: {
+      maxAge: 60000 * 60,
+    },
+  })
 );
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(routes);
 
-app.post('/api/users', checkSchema(createUserValidationSchema), (req, res) => {
-  const result = validationResult(req);
-  console.log(result);
-
-  if (!result.isEmpty()) return res.status(400).send(result.array());
-
-  const data = matchedData(req);
-
-  const newUser = { id: mockUsers[mockUsers.length - 1].id + 1, ...data };
-  mockUsers.push(newUser);
-  return res.status(201).send(newUser);
+app.post('/api/auth', passport.authenticate('local'), (req, res) => {
+  res.sendStatus(200);
 });
 
-// app.use(loggingMiddleware, (req, res, next) => {
-//   conssole.log('Finished logging');
-//   next();
-// });
-
-app.get('/api/users/:id', resolveIndexByUserId, (req, res) => {
-  const { findUserIndex } = req;
-  const findUser = mockUsers[findUserIndex];
-  if (!findUser) return res.sendStatus(404);
-  return res.send(findUser);
+app.get('/api/auth/status', (req, res) => {
+  console.log(`Inside /auth/status endpoint`);
+  console.log(req.user);
+  console.log(req.session);
+  return req.user ? res.send(req.user) : res.sendStatus(401);
 });
 
-// app.get('/api/products', (req, res) => {
-//   res.send([
-//     { id: 123, name: 'chicken  breast', price: 5.99 },
-//     { id: 124, name: 'salmon', price: 10.99 },
-//     { id: 125, name: 'beef', price: 8.99 },
-//   ]);
-// });
+app.post('/api/auth/logout', (req, res) => {
+  if (!req.user) return res.sendStatus(401);
+  req.logout((err) => {
+    if (err) return res.sendStatus(500);
+    res.send(200);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-app.put('/api/users/:id', resolveIndexByUserId, (req, res) => {
-  const { body, findUserIndex } = req;
-  mockUsers[findUserIndex] = { id: mockUsers[findUserIndex].id, ...body };
-  return res.sendStatus(204);
+app.get('/', (req, res) => {
+  console.log(req.session);
+  console.log(req.session.id);
+  req.session.visited = true;
+  res.cookie('hello', 'world', { maxAge: 30000, signed: true });
+  res.status(201).send({ msg: 'Hello World!' });
 });
 
-app.patch('/api/users/:id', resolveIndexByUserId, (req, res) => {
-  const { body, findUserIndex } = req;
-  mockUsers[findUserIndex] = { ...mockUsers[findUserIndex], ...body };
-  return res.sendStatus(204);
-});
+// app.post('/api/auth', (req, res) => {
+//   const {
+//     body: { username, password },
+//   } = req;
 
-app.delete('/api/users/:id', resolveIndexByUserId, (req, res) => {
-  const { findUserIndex } = req;
+//   const findUser = mockUsers.find((user) => user.username === username);
+//   if (!findUser || findUser.password !== password)
+//     return res.status(401).send({ msg: 'Bad credentials' });
 
-  mockUsers.splice(findUserIndex, 1);
-  return res.sendStatus(204);
-});
+//   req.session.user = findUser;
+//   return res.status(200).send(findUser);
+// });
+
+// app.get('/api/auth/status', (req, res) => {
+//   req.sessionStore.get(req.sessionID, (err, session) => {
+//     console.log(session);
+//   });
+
+//   return req.session.user
+//     ? res.status(200).send(req.session.user)
+//     : res.status(401).send({ msg: 'Not Authenticated' });
+// });
+
+// app.post('/api/cart', (req, res) => {
+//   if (!req.session.user) return res.sendStatus(401);
+//   const { body: item } = req;
+
+//   const { cart } = req.session;
+//   if (cart) {
+//     cart.push(item);
+//   } else {
+//     req.session.cart = [item];
+//   }
+//   return res.status(201).send(item);
+// });
+
+// app.get('/api/cart', (req, res) => {
+//   if (!req.session.user) return res.sendStatus(401);
+//   return res.send(req.session.cart ?? []);
+// });
